@@ -1,29 +1,36 @@
 #!/usr/bin/env python3
-
-import time
+"""
+web cache and tracker
+"""
 import requests
+import redis
+from functools import wraps
 
-cache = {}
+store = redis.Redis()
 
-def cache_decorator(func):
+
+def count_url_access(method):
+    """ Decorator counting how many times
+    a URL is accessed """
+    @wraps(method)
     def wrapper(url):
-     if url in cache and time.time() - cache[url]['timestamp'] < 10:
-            cache[url]['count'] += 1
-            return cache[url]['content']
-     else:
-         response = func(url)
-        cache[url] = {'content': response, 'timestamp': time.time(), 'count': 1}
-             return response
-      return wrapper
+        cached_key = "cached:" + url
+        cached_data = store.get(cached_key)
+        if cached_data:
+            return cached_data.decode("utf-8")
 
-       @cache_decorator
-                                                                             def get_page(url):
-             response = requests.get(url)
-             return response.text
+        count_key = "count:" + url
+        html = method(url)
 
-        if __name__ == "__main__":
-                                                                                 slow_url = "http://slowwly.robertomurray.co.uk/delay/1000/url/https://example.com"
-                                                                                for _ in range(5):
-                                                                                     page = get_page(slow_url)
-                print(page)
-                time.sleep(2)
+        store.incr(count_key)
+        store.set(cached_key, html)
+        store.expire(cached_key, 10)
+        return html
+    return wrapper
+
+
+@count_url_access
+def get_page(url: str) -> str:
+    """ Returns HTML content of a url """
+    res = requests.get(url)
+    return res.text
