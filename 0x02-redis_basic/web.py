@@ -1,51 +1,29 @@
 #!/usr/bin/env python3
-"""web module
-"""
-from functools import wraps
-from typing import Callable
-import redis
+
+import time
 import requests
 
-_redis = redis.Redis()
-_redis.flushdb()
+cache = {}
 
+def cache_decorator(func):
+    def wrapper(url):
+     if url in cache and time.time() - cache[url]['timestamp'] < 10:
+            cache[url]['count'] += 1
+            return cache[url]['content']
+     else:
+         response = func(url)
+        cache[url] = {'content': response, 'timestamp': time.time(), 'count': 1}
+             return response
+      return wrapper
 
-def count_requests(method: Callable) -> Callable:
-    """count_requests function
+       @cache_decorator
+                                                                             def get_page(url):
+             response = requests.get(url)
+             return response.text
 
-    Args:
-        method (Callable): method
-
-    Returns:
-        Callable: wrapper
-    """
-    @wraps(method)
-    def wrapper(*args, **kwargs):
-        """wrapper function
-
-        Returns:
-            [type]: wrapper
-        """
-        url = args[0]
-        cached = _redis.get(f"cached:{url}")
-        if cached:
-            return cached.decode("utf-8")
-        response = method(*args, **kwargs)
-        _redis.incr(f"count:{url}")
-        _redis.setex(f"cached:{url}", 10, response)
-        return response
-    return wrapper
-
-
-@count_requests
-def get_page(url: str) -> str:
-    """get_page function
-
-    Args:
-        url (str): url
-
-    Returns:
-        str: response
-    """
-    response = requests.get(url, timeout=10)
-    return response.text
+        if __name__ == "__main__":
+                                                                                 slow_url = "http://slowwly.robertomurray.co.uk/delay/1000/url/https://example.com"
+                                                                                for _ in range(5):
+                                                                                     page = get_page(slow_url)
+                print(page)
+                time.sleep(2)
